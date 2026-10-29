@@ -15,6 +15,9 @@
   var PITCH = {1:'Old Pitch',2:'Old Pitch',3:'Juvenile Pitch',4:'Juvenile Pitch',5:'Senior Pitch',6:'Senior Pitch'};
   var SIDE  = {1:'Clubhouse',2:'Cappalug',3:'Front',4:'Back',5:'Back',6:'Front'};
   var PAIRS = [[1,2],[3,4],[5,6]];
+  // Single-room facilities: just one half each, no pairing, so where() shows
+  // the plain room name rather than a "side" or "full pitch" qualifier.
+  var SOLO = {7:'Gym', 8:'Clubhouse Meeting Room'};
 
   var ICON = {
     pitch: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16M3 12h4M17 12h4"/><circle cx="12" cy="12" r="2.6"/></svg>',
@@ -182,9 +185,19 @@
       else if(a) out.push(PITCH[pr[0]] + ' \u00b7 ' + SIDE[pr[0]] + ' side');
       else if(b) out.push(PITCH[pr[1]] + ' \u00b7 ' + SIDE[pr[1]] + ' side');
     });
+    for(var k in SOLO){ if(h.indexOf(+k) > -1) out.push(SOLO[k]); }
     return out.join(', ');
   }
-  function kindOf(b){ return b.kind === 'match' ? 'Match' : b.practice ? 'Practice match' : 'Training'; }
+  /* A Gym or Meeting Room booking shows its own name - there's only one of
+     each, so that already says everything "Training" would have. */
+  function soloName(h){
+    for(var k in SOLO){ if((h||[]).indexOf(+k) > -1) return SOLO[k]; }
+    return null;
+  }
+  function kindOf(b){
+    var s = soloName(b.halves); if(s) return s;
+    return b.kind === 'match' ? 'Match' : b.practice ? 'Practice match' : 'Training';
+  }
   function title(b){ return b.team + (b.opponent ? ' v ' + b.opponent : ''); }
 
   var ITEMS = [], LOADED = false, SHEET_DAY = null, SITE_CACHE = null, SITE_AT = 0;
