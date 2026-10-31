@@ -403,7 +403,7 @@ body.embed main{padding:4px}
     <label id="b-code-wrap" hidden>Club booking code<input id="b-code" autocomplete="off" autocapitalize="none" placeholder="From the coaches' WhatsApp group"></label>
     <div class="setupnote"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
       <span><b>Set-up and pack-away are within your booking time.</b></span></div>
-    <div class="sumcard empty" id="b-sum"><b id="b-sum-what">Pick a side on the map</b><span id="b-sum-when"></span></div>
+    <div class="sumcard empty" id="b-sum"><b id="b-sum-what">Tap an area on the map to book it</b><span id="b-sum-when"></span></div>
     <button class="btn block" id="b-go">BOOK</button>
     <div id="b-result"></div>
   </div>
@@ -538,6 +538,7 @@ const SPACES = () => PITCHES.concat(FACILITIES);
 const SIDE = {1:'South', 2:'North', 3:'Front', 4:'Back', 5:'Back', 6:'Front', 7:'Gym', 8:'Clubhouse'};
 const sideName = h => `${pitchOf(h).name} \u00b7 ${SIDE[h]}`;
 
+let LAST = null;   // the booking just made, shown in the summary box until something new is picked
 let CLOSED = [6], CODE_REQ = false, PRACTICE = false, SEASON_END = null, BLOCK = false, BLOCK_KIND = '4';
 const closedNow = h => !PRACTICE && CLOSED.includes(h);   // halves closed to training; the database is the authority
 const configured = !SUPABASE_URL.includes('YOUR-PROJECT') && !!window.supabase;
@@ -786,7 +787,7 @@ async function refreshBook(fresh=true){
   try{ rows=await dayRows(d,fresh); }catch(err){ $('b-selnote').textContent='Could not load bookings: '+cleanErr(err); }
   [...bookSel].forEach(h=>{ if(closedNow(h)||rows.some(b=>clash(b,s,e,[h],PRACTICE))) bookSel.delete(h); });
   paintMap('book',rows,s,e,bookSel,false);
-  $('b-selnote').textContent = bookSel.size ? 'You\'re booking: '+describeHalves([...bookSel]) : (PRACTICE?'Tap a pitch on the map.':'Tap a side on the map.');
+  $('b-selnote').textContent = bookSel.size ? 'You\'re booking: '+describeHalves([...bookSel]) : (PRACTICE?'Tap a pitch on the map.':'Tap an area on the map.');
 }
 wireMap('map-book',bookSel,refreshBook,false,()=>PRACTICE);
 function renderBookQuick(){
@@ -828,7 +829,7 @@ $('b-go').addEventListener('click', async ()=>{
   const out=$('b-result'), [d,s,e]=bookTimes();
   const opp=$('b-opp').value.trim(), code=$('b-code').value.trim(), team=chosenTeam(), name=$('b-name').value.trim(), phone=$('b-phone').value.trim(), email=$('b-email').value.trim(), weekly=BLOCK && !PRACTICE;
   const errs=[];
-  if(!bookSel.size) errs.push(PRACTICE?'Tap a pitch on the map.':'Tap at least one side on the map.');
+  if(!bookSel.size) errs.push(PRACTICE?'Tap a pitch on the map.':'Tap a pitch side, the Clubhouse or the Gym on the map.');
   if(!team) errs.push('Choose your team.');
   if(CODE_REQ && !code) errs.push('Enter the club booking code.');
   if(PRACTICE && !opp) errs.push('Enter who you are playing.');
@@ -849,7 +850,9 @@ $('b-go').addEventListener('click', async ()=>{
     if(/pick at least one half/i.test(m) && halves.some(h=>SINGLE_HALVES.includes(h))) m='The booking system has not been set up for the Gym and Clubhouse yet. Please tell a club officer.';
     out.innerHTML=`<div class="notice bad"><b>Couldn't book</b>${esc(m)}</div>`; refreshBook(true); return; }
   saveMe({name, phone, email, team, code});
-  bookSel.clear(); setBlock(false); refreshBook(true); prefetchDays();
+  LAST={ ref:data.ref, key:d+'|'+s+'|'+e,
+         text: describeHalves(halves)+' \u00b7 '+niceDate(d)+' \u00b7 '+s+'\u2013'+e+((data.booked||[]).length>1?' \u00b7 '+data.booked.length+' weeks':'')+(PRACTICE?' \u00b7 Practice match':'') };
+  bookSel.clear(); setBlock(false); refreshBook(true); prefetchDays(); updateSummary();
   const booked=data.booked||[], skipped=data.skipped||[];
   const wasPractice=PRACTICE; if(PRACTICE) $('b-opp').value='';
   out.innerHTML=`<div class="notice ${skipped.length?'warn':'ok'}"><b>${wasPractice?'Practice match booked':'Booked'}${booked.length>1?' · '+booked.length+' weeks':' · '+esc(data.ref)}</b>${esc(team)}${wasPractice?' v '+esc(opp):''}, ${s}–${e}<br>${esc(describeHalves(halves))}
@@ -955,7 +958,7 @@ async function blockPreview(){
   const box=$('b-block-sum'), dates=blockDates(), [d0,s,e]=bookTimes(), halves=[...bookSel];
   const wd=new Date(d0+'T12:00').toLocaleDateString('en-IE',{weekday:'long'});
   const head=`<b>Every ${wd}</b>, ${s}–${e} · ${dates.length} session${dates.length>1?'s':''} (${fmtShort(dates[0])} to ${fmtShort(dates[dates.length-1])})`;
-  if(!halves.length){ box.innerHTML=head+'<br><span class="mut">Pick a side on the map and we\'ll check every week is free.</span>'; return; }
+  if(!halves.length){ box.innerHTML=head+'<br><span class="mut">Tap an area on the map and we\'ll check every week is free.</span>'; return; }
   box.innerHTML=head+'<br><span class="mut">Checking each week…</span>';
   const tok=++bpToken, missing=dates.filter(d=>!cache[d]);
   if(missing.length && sb){ try{ await loadRange(missing[0], missing[missing.length-1]); }catch(err){} }
@@ -986,9 +989,16 @@ function updateDebug(){
 function updateSummary(){
   updateDebug();
   const [d,s,e]=bookTimes(), picked=bookSel.size>0;
-  $('b-sum-what').textContent = picked ? describeHalves([...bookSel]) : (PRACTICE?'Pick a pitch on the map':'Pick a side on the map');
-  $('b-sum-when').textContent = niceDate(d)+' · '+s+'–'+e+(PRACTICE?' · Practice match':'')+(BLOCK?' · '+blockDates().length+' weeks':'');
-  $('b-sum').classList.toggle('empty',!picked);
+  if(LAST && (picked || LAST.key!==d+'|'+s+'|'+e)) LAST=null;               // picking again, or another time, ends the confirmation
+  if(LAST){
+    $('b-sum-what').textContent = '\u2713 Booked \u00b7 '+LAST.ref;
+    $('b-sum-when').textContent = LAST.text;
+    $('b-sum').classList.remove('empty');
+  } else {
+    $('b-sum-what').textContent = picked ? describeHalves([...bookSel]) : (PRACTICE?'Tap a pitch on the map to book it':'Tap an area on the map to book it');
+    $('b-sum-when').textContent = niceDate(d)+' · '+s+'–'+e+(PRACTICE?' · Practice match':'')+(BLOCK?' · '+blockDates().length+' weeks':'');
+    $('b-sum').classList.toggle('empty',!picked);
+  }
   if($('b-timelbl')) $('b-timelbl').textContent=s+'–'+e;
   $('b-where-hint').textContent = PRACTICE?'Slide the days, tap a pitch to book it':'Slide the days, tap an area to book it';
 }
