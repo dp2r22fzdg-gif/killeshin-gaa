@@ -9,12 +9,13 @@ REFRESH-INTERVAL;VALUE=DURATION:PT6H
 X-PUBLISHED-TTL:PT6H
 BEGIN:VEVENT
 UID:killeshin-men-2026-11-06-0@killeshingaa
-DTSTAMP:20261103T104830Z
+DTSTAMP:20261103T182712Z
 DTSTART;TZID=Europe/Dublin:20261106T193000
 DTEND;TZID=Europe/Dublin:20261106T210000
 SUMMARY:Portlaoise v Killeshin (Men's U20)
 LOCATION:Rathleague
-DESCRIPTION:Under 20 Football Championship - League Division 2 - Round 3
+DESCRIPTION:Under 20 Football Championship - League Division 2 - Round 3 
+ · Referee: Maurice Deegan
 BEGIN:VALARM
 TRIGGER:-PT2H
 ACTION:DISPLAY
